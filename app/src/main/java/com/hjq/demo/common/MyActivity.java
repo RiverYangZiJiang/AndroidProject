@@ -1,18 +1,28 @@
 package com.hjq.demo.common;
 
-import android.content.pm.ActivityInfo;
+import android.content.Intent;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.view.View;
 
-import com.hjq.bar.OnTitleBarListener;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
+
+import com.gyf.immersionbar.ImmersionBar;
 import com.hjq.bar.TitleBar;
-import com.hjq.demo.helper.ActivityStackManager;
-import com.hjq.toast.ToastUtils;
-import com.hjq.umeng.UmengHelper;
+import com.hjq.base.BaseActivity;
+import com.hjq.base.BaseDialog;
+import com.hjq.demo.R;
+import com.hjq.demo.action.SwipeAction;
+import com.hjq.demo.action.TitleBarAction;
+import com.hjq.demo.action.ToastAction;
+import com.hjq.demo.http.model.HttpData;
+import com.hjq.demo.ui.dialog.WaitDialog;
+import com.hjq.http.EasyHttp;
+import com.hjq.http.listener.OnHttpListener;
+import com.hjq.umeng.UmengClient;
 
 import butterknife.ButterKnife;
-import butterknife.Unbinder;
+import okhttp3.Call;
 
 /**
  *    author : Android 轮子哥
@@ -20,49 +30,122 @@ import butterknife.Unbinder;
  *    time   : 2018/10/18
  *    desc   : 项目中的 Activity 基类
  */
-public abstract class MyActivity extends UIActivity
-        implements OnTitleBarListener {
+public abstract class MyActivity extends BaseActivity
+        implements ToastAction, TitleBarAction,
+        SwipeAction, OnHttpListener {
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        ActivityStackManager.getInstance().onActivityCreated(this);
+    /** 标题栏对象 */
+    private TitleBar mTitleBar;
+    /** 状态栏沉浸 */
+    private ImmersionBar mImmersionBar;
+
+    /** 加载对话框 */
+    private BaseDialog mDialog;
+    /** 对话框数量 */
+    private int mDialogTotal;
+
+    /**
+     * 当前加载对话框是否在显示中
+     */
+    public boolean isShowDialog() {
+        return mDialog != null && mDialog.isShowing();
     }
 
-    private Unbinder mButterKnife;//View注解
+    /**
+     * 显示加载对话框
+     */
+    public void showDialog() {
+        if (mDialog == null) {
+            mDialog = new WaitDialog.Builder(this)
+                    .setCancelable(false)
+                    .create();
+        }
+        if (!mDialog.isShowing()) {
+            mDialog.show();
+        }
+        mDialogTotal++;
+    }
+
+    /**
+     * 隐藏加载对话框
+     */
+    public void hideDialog() {
+        if (mDialogTotal == 1) {
+            if (mDialog != null && mDialog.isShowing()) {
+                mDialog.dismiss();
+            }
+        }
+        if (mDialogTotal > 0) {
+            mDialogTotal--;
+        }
+    }
 
     @Override
     protected void initLayout() {
         super.initLayout();
 
-        // 初始化标题栏的监听
-        if (getTitleBarId() > 0) {
-            if (findViewById(getTitleBarId()) instanceof TitleBar) {
-                ((TitleBar) findViewById(getTitleBarId())).setOnTitleBarListener(this);
-            }
+        if (getTitleBar() != null) {
+            getTitleBar().setOnTitleBarListener(this);
         }
 
-        mButterKnife = ButterKnife.bind(this);
-
-        initOrientation();
+        ButterKnife.bind(this);
+        initImmersion();
     }
 
     /**
-     * 初始化横竖屏方向，会和 LauncherTheme 主题样式有冲突，注意不要同时使用
+     * 初始化沉浸式
      */
-    protected void initOrientation() {
-        // 当前 Activity 不能是透明的并且没有指定屏幕方向，默认设置为竖屏
-        if (getRequestedOrientation() == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+    protected void initImmersion() {
+        // 初始化沉浸式状态栏
+        if (isStatusBarEnabled()) {
+            createStatusBarConfig().init();
+
+            // 设置标题栏沉浸
+            if (mTitleBar != null) {
+                ImmersionBar.setTitleBar(this, mTitleBar);
+            }
         }
+    }
+
+    /**
+     * 是否使用沉浸式状态栏
+     */
+    protected boolean isStatusBarEnabled() {
+        return true;
+    }
+
+    /**
+     * 状态栏字体深色模式
+     */
+    protected boolean isStatusBarDarkFont() {
+        return true;
+    }
+
+    /**
+     * 初始化沉浸式状态栏
+     */
+    protected ImmersionBar createStatusBarConfig() {
+        // 在BaseActivity里初始化
+        mImmersionBar = ImmersionBar.with(this)
+                // 默认状态栏字体颜色为黑色
+                .statusBarDarkFont(isStatusBarDarkFont());
+        return mImmersionBar;
+    }
+
+    /**
+     * 获取状态栏沉浸的配置对象
+     */
+    @Nullable
+    public ImmersionBar getStatusBarConfig() {
+        return mImmersionBar;
     }
 
     /**
      * 设置标题栏的标题
      */
     @Override
-    public void setTitle(int titleId) {
-        setTitle(getText(titleId));
+    public void setTitle(@StringRes int id) {
+        setTitle(getString(id));
     }
 
     /**
@@ -71,77 +154,82 @@ public abstract class MyActivity extends UIActivity
     @Override
     public void setTitle(CharSequence title) {
         super.setTitle(title);
-        TitleBar titleBar = getTitleBar();
-        if (titleBar != null) {
-            titleBar.setTitle(title);
+        if (mTitleBar != null) {
+            mTitleBar.setTitle(title);
         }
-    }
-
-    @Nullable
-    public TitleBar getTitleBar() {
-        if (getTitleBarId() > 0 && findViewById(getTitleBarId()) instanceof TitleBar) {
-            return findViewById(getTitleBarId());
-        }
-        return null;
     }
 
     @Override
-    public boolean statusBarDarkFont() {
-        //返回true表示黑色字体
-        return true;
+    @Nullable
+    public TitleBar getTitleBar() {
+        if (mTitleBar == null) {
+            mTitleBar = findTitleBar(getContentView());
+        }
+        return mTitleBar;
     }
 
-    /**
-     * {@link OnTitleBarListener}
-     */
-
-    // 标题栏左边的View被点击了
     @Override
     public void onLeftClick(View v) {
         onBackPressed();
     }
 
-    // 标题栏中间的View被点击了
-    @Override
-    public void onTitleClick(View v) {}
-
-    // 标题栏右边的View被点击了
-    @Override
-    public void onRightClick(View v) {}
-
     @Override
     protected void onResume() {
         super.onResume();
-        // 友盟统计
-        UmengHelper.onResume(this);
+        UmengClient.onResume(this);
     }
 
     @Override
     protected void onPause() {
+        UmengClient.onPause(this);
         super.onPause();
-        // 友盟统计
-        UmengHelper.onPause(this);
+    }
+
+    @Override
+    public void startActivityForResult(Intent intent, int requestCode, @Nullable Bundle options) {
+        super.startActivityForResult(intent, requestCode, options);
+        overridePendingTransition(R.anim.activity_right_in, R.anim.activity_right_out);
+    }
+
+    @Override
+    public void finish() {
+        super.finish();
+        overridePendingTransition(R.anim.activity_left_in, R.anim.activity_left_out);
+    }
+
+    /**
+     * {@link OnHttpListener}
+     */
+
+    @Override
+    public void onStart(Call call) {
+        showDialog();
+    }
+
+    @Override
+    public void onSucceed(Object result) {
+        if (result instanceof HttpData) {
+            toast(((HttpData) result).getMessage());
+        }
+    }
+
+    @Override
+    public void onFail(Exception e) {
+        toast(e.getMessage());
+    }
+
+    @Override
+    public void onEnd(Call call) {
+        hideDialog();
     }
 
     @Override
     protected void onDestroy() {
+        EasyHttp.cancel(this);
+        if (isShowDialog()) {
+            mDialog.dismiss();
+        }
+        mDialog = null;
         super.onDestroy();
-        if (mButterKnife != null) mButterKnife.unbind();
-        ActivityStackManager.getInstance().onActivityDestroyed(this);
-    }
-
-    /**
-     * 显示吐司
-     */
-    public void toast(CharSequence s) {
-        ToastUtils.show(s);
-    }
-
-    public void toast(int id) {
-        ToastUtils.show(id);
-    }
-
-    public void toast(Object object) {
-        ToastUtils.show(object);
     }
 }

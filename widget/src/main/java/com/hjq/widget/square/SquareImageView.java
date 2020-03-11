@@ -1,16 +1,17 @@
 package com.hjq.widget.square;
 
 import android.content.Context;
-import android.support.v7.widget.AppCompatImageView;
 import android.util.AttributeSet;
+
+import androidx.appcompat.widget.AppCompatImageView;
 
 /**
  *    author : Android 轮子哥
  *    github : https://github.com/getActivity/AndroidProject
  *    time   : 2018/10/18
- *    desc   : 正方形的ImageView
+ *    desc   : 正方形的 ImageView
  */
-public class SquareImageView extends AppCompatImageView {
+public final class SquareImageView extends AppCompatImageView {
 
     public SquareImageView(Context context) {
         super(context);

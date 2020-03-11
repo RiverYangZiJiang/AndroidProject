@@ -1,15 +1,23 @@
 package com.hjq.demo.ui.activity;
 
+import android.content.Context;
+import android.content.Intent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 
 import com.hjq.demo.R;
+import com.hjq.demo.aop.DebugLog;
+import com.hjq.demo.aop.SingleClick;
 import com.hjq.demo.common.MyActivity;
 import com.hjq.demo.helper.InputTextHelper;
+import com.hjq.demo.http.model.HttpData;
+import com.hjq.demo.http.request.PasswordApi;
+import com.hjq.demo.other.IntentKey;
+import com.hjq.http.EasyHttp;
+import com.hjq.http.listener.HttpCallback;
 
 import butterknife.BindView;
-import butterknife.OnClick;
 
 /**
  *    author : Android 轮子哥
@@ -17,7 +25,15 @@ import butterknife.OnClick;
  *    time   : 2019/02/27
  *    desc   : 重置密码
  */
-public class PasswordResetActivity extends MyActivity {
+public final class PasswordResetActivity extends MyActivity {
+
+    @DebugLog
+    public static void start(Context context, String phone, String code) {
+        Intent intent = new Intent(context, PasswordResetActivity.class);
+        intent.putExtra(IntentKey.PHONE, phone);
+        intent.putExtra(IntentKey.CODE, code);
+        context.startActivity(intent);
+    }
 
     @BindView(R.id.et_password_reset_password1)
     EditText mPasswordView1;
@@ -26,7 +42,10 @@ public class PasswordResetActivity extends MyActivity {
     @BindView(R.id.btn_password_reset_commit)
     Button mCommitView;
 
-    private InputTextHelper mInputTextHelper;
+    /** 手机号 */
+    private String mPhone;
+    /** 验证码 */
+    private String mCode;
 
     @Override
     protected int getLayoutId() {
@@ -34,36 +53,47 @@ public class PasswordResetActivity extends MyActivity {
     }
 
     @Override
-    protected int getTitleBarId() {
-        return R.id.tb_password_reset_title;
-    }
-
-    @Override
     protected void initView() {
-        mInputTextHelper = new InputTextHelper(mCommitView);
-        mInputTextHelper.addViews(mPasswordView1, mPasswordView2);
+        InputTextHelper.with(this)
+                .addView(mPasswordView1)
+                .addView(mPasswordView2)
+                .setMain(mCommitView)
+                .setListener(helper -> mPasswordView1.getText().toString().length() >= 6 &&
+                        mPasswordView1.getText().toString().equals(mPasswordView2.getText().toString()))
+                .build();
+        setOnClickListener(R.id.btn_password_reset_commit);
     }
 
     @Override
     protected void initData() {
-
+        mPhone = getString(IntentKey.PHONE);
+        mCode = getString(IntentKey.CODE);
     }
 
-    @OnClick({R.id.btn_password_reset_commit})
-    public void onClick(View v) {
-        switch (v.getId()) {
-            case R.id.btn_password_reset_commit: //提交注册
-                if (!mPasswordView1.getText().toString().equals(mPasswordView2.getText().toString())) {
-                    toast(getResources().getString(R.string.two_password_input_error));
-                    break;
-                }
-                break;
-        }
-    }
-
+    @SingleClick
     @Override
-    protected void onDestroy() {
-        mInputTextHelper.removeViews();
-        super.onDestroy();
+    public void onClick(View v) {
+        if (v.getId() == R.id.btn_password_reset_commit) {
+            if (true) {
+                toast(R.string.password_reset_success);
+                finish();
+                return;
+            }
+
+            // 重置密码
+            EasyHttp.post(this)
+                    .api(new PasswordApi()
+                    .setPhone(mPhone)
+                    .setCode(mCode)
+                    .setPassword(mPasswordView1.getText().toString()))
+                    .request(new HttpCallback<HttpData<Void>>(this) {
+
+                        @Override
+                        public void onSucceed(HttpData<Void> data) {
+                            toast(R.string.password_reset_success);
+                            finish();
+                        }
+                    });
+        }
     }
 }

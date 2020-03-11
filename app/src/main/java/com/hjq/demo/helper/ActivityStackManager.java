@@ -1,8 +1,12 @@
 package com.hjq.demo.helper;
 
 import android.app.Activity;
+import android.app.Application;
+import android.os.Bundle;
 
-import java.util.HashMap;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.collection.ArrayMap;
 
 /**
  *    author : Android 轮子哥
@@ -10,13 +14,15 @@ import java.util.HashMap;
  *    time   : 2018/11/18
  *    desc   : Activity 栈管理
  */
-public class ActivityStackManager {
+public final class ActivityStackManager implements Application.ActivityLifecycleCallbacks {
 
     private static volatile ActivityStackManager sInstance;
 
-    private HashMap<String, Activity> mActivitySet = new HashMap<>();
+    private final ArrayMap<String, Activity> mActivitySet = new ArrayMap<>();
 
-    // 当前 Activity 对象标记
+    /** 当前应用上下文对象 */
+    private Application mApplication;
+    /** 当前 Activity 对象标记 */
     private String mCurrentTag;
 
     private ActivityStackManager() {}
@@ -33,6 +39,18 @@ public class ActivityStackManager {
         return sInstance;
     }
 
+    public void init(Application application) {
+        mApplication = application;
+        application.registerActivityLifecycleCallbacks(this);
+    }
+
+    /**
+     * 获取 Application 对象
+     */
+    public Application getApplication() {
+        return mApplication;
+    }
+
     /**
      * 获取栈顶的 Activity
      */
@@ -44,35 +62,32 @@ public class ActivityStackManager {
      * 销毁所有的 Activity
      */
     public void finishAllActivities() {
-        finishAllActivities(null);
+        finishAllActivities((Class<? extends Activity>) null);
     }
 
     /**
-     * 销毁所有的 Activity，除这个 Class 之外的 Activity
+     * 销毁所有的 Activity，除这些 Class 之外的 Activity
      */
-    public void finishAllActivities(Class<? extends Activity> clazz) {
+    @SafeVarargs
+    public final void finishAllActivities(Class<? extends Activity>... classArray) {
         String[] keys = mActivitySet.keySet().toArray(new String[]{});
         for (String key : keys) {
             Activity activity = mActivitySet.get(key);
-            if (activity != null && !activity.isFinishing() &&
-                    !(activity.getClass() == clazz)) {
-                activity.finish();
-                mActivitySet.remove(key);
+            if (activity != null && !activity.isFinishing()) {
+                boolean whiteClazz = false;
+                if (classArray != null) {
+                    for (Class<? extends Activity> clazz : classArray) {
+                        if (activity.getClass() == clazz) {
+                            whiteClazz = true;
+                        }
+                    }
+                }
+                // 如果不是白名单上面的 Activity 就销毁掉
+                if (!whiteClazz) {
+                    activity.finish();
+                    mActivitySet.remove(key);
+                }
             }
-        }
-    }
-
-    public void onActivityCreated(Activity activity) {
-        mCurrentTag = getObjectTag(activity);
-        mActivitySet.put(getObjectTag(activity), activity);
-    }
-
-    public void onActivityDestroyed(Activity activity) {
-        mActivitySet.remove(getObjectTag(activity));
-        // 如果当前的 Activity 是最后一个的话
-        if (getObjectTag(activity).equals(mCurrentTag)) {
-            // 清除当前标记
-            mCurrentTag = null;
         }
     }
 
@@ -82,5 +97,39 @@ public class ActivityStackManager {
     private static String getObjectTag(Object object) {
         // 对象所在的包名 + 对象的内存地址
         return object.getClass().getName() + Integer.toHexString(object.hashCode());
+    }
+
+    @Override
+    public void onActivityCreated(@NonNull Activity activity, @Nullable Bundle savedInstanceState) {
+        mCurrentTag = getObjectTag(activity);
+        mActivitySet.put(getObjectTag(activity), activity);
+    }
+
+    @Override
+    public void onActivityStarted(@NonNull Activity activity) {
+        mCurrentTag = getObjectTag(activity);
+    }
+
+    @Override
+    public void onActivityResumed(@NonNull Activity activity) {
+        mCurrentTag = getObjectTag(activity);
+    }
+
+    @Override
+    public void onActivityPaused(@NonNull Activity activity) {}
+
+    @Override
+    public void onActivityStopped(@NonNull Activity activity) {}
+
+    @Override
+    public void onActivitySaveInstanceState(@NonNull Activity activity, @NonNull Bundle outState) {}
+
+    @Override
+    public void onActivityDestroyed(@NonNull Activity activity) {
+        mActivitySet.remove(getObjectTag(activity));
+        if (getObjectTag(activity).equals(mCurrentTag)) {
+            // 清除当前标记
+            mCurrentTag = null;
+        }
     }
 }

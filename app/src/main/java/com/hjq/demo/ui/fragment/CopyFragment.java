@@ -1,7 +1,8 @@
 package com.hjq.demo.ui.fragment;
 
 import com.hjq.demo.R;
-import com.hjq.demo.common.MyLazyFragment;
+import com.hjq.demo.common.MyFragment;
+import com.hjq.demo.ui.activity.CopyActivity;
 
 /**
  *    author : Android 轮子哥
@@ -9,7 +10,7 @@ import com.hjq.demo.common.MyLazyFragment;
  *    time   : 2018/10/18
  *    desc   : 可进行拷贝的副本
  */
-public class CopyFragment extends MyLazyFragment {
+public final class CopyFragment extends MyFragment<CopyActivity> {
 
     public static CopyFragment newInstance() {
         return new CopyFragment();
@@ -18,11 +19,6 @@ public class CopyFragment extends MyLazyFragment {
     @Override
     protected int getLayoutId() {
         return R.layout.fragment_copy;
-    }
-
-    @Override
-    protected int getTitleBarId() {
-        return R.id.tb_copy_title;
     }
 
     @Override
